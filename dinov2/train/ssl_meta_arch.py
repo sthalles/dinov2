@@ -357,6 +357,8 @@ class SSLMetaArch(nn.Module):
             # accumulate loss
             loss_accumulator += self.ibot_loss_weight * ibot_patch_loss
 
+        # loss_accumulator.register_hook(lambda grad: print(grad))
+        
         self.backprop_loss(loss_accumulator)
 
         # I commemented this due to:
