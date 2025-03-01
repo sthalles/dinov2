@@ -62,13 +62,19 @@ def is_sharded_fsdp(x):
     return is_fsdp(x) and x.sharding_strategy is not ShardingStrategy.NO_SHARD
 
 
-def free_if_fsdp(x):
-    if is_sharded_fsdp(x):
-        handles = x._handles
-        true_list = [True for h in handles]
-        _reshard(x, handles, true_list)
+# def free_if_fsdp(x):
+#     if is_sharded_fsdp(x):
+#         handles = x._handles
+#         true_list = [True for h in handles]
+#         _reshard(x, handles, true_list)
 
-
+# from: https://github.com/pathologywatch/dinov2/commit/b05584f6f85d700d4becc03b0b91f6598cf4aee4
+def free_if_fsdp(x: FSDP):
+    if is_sharded_fsdp(x) and x._has_params:
+        handle = x._handle
+        _reshard(x, handle, True)
+        
+        
 def get_fsdp_modules(x):
     return FSDP.fsdp_modules(x)
 
@@ -113,6 +119,7 @@ class FSDPCheckpointer(Checkpointer):
 
     def load(self, *args, **kwargs):
         with FSDP.state_dict_type(self.model, StateDictType.LOCAL_STATE_DICT):
+            # kwargs['weights_only'] = False
             return super().load(*args, **kwargs)
 
     def has_checkpoint(self) -> bool:
