@@ -18,6 +18,7 @@ try:
     from xformers.ops import cross_entropy
 
     def lossfunc(t, s, temp):
+        raise Exception("Should not come here.")
         s = s.float()
         t = t.float()
         if s.ndim == 2:
@@ -28,8 +29,10 @@ try:
 except ImportError:
 
     def lossfunc(t, s, temp):
-        return torch.sum(t * F.log_softmax(s / temp, dim=-1), dim=-1)
+        return torch.sum(t * torch.log(s), dim=-1)
 
+    # def lossfunc(t, s, temp):
+    #     return torch.sum(t * F.log_softmax(s / temp, dim=-1), dim=-1)
 
 class iBOTPatchLoss(nn.Module):
     def __init__(self, patch_out_dim, student_temp=0.1, center_momentum=0.9):
@@ -124,6 +127,30 @@ class iBOTPatchLoss(nn.Module):
             loss = loss[:n_masked_patches]
         loss = loss * masks_weight
         return -loss.sum() / student_masks_flat.shape[0]
+
+    # def forward_masked(
+    #     self,
+    #     student_patch_tokens_masked,
+    #     teacher_patch_tokens_masked,
+    #     student_masks_flat,
+    #     n_masked_patches=None,
+    #     masks_weight=None,
+    # ):
+    #     t = teacher_patch_tokens_masked
+    #     s = student_patch_tokens_masked
+    #     # loss = torch.sum(t * F.log_softmax(s / self.student_temp, dim=-1), dim=-1)
+    #     loss = lossfunc(t, s, self.student_temp)
+    #     if masks_weight is None:
+    #         masks_weight = (
+    #             (1 / student_masks_flat.sum(-1).clamp(min=1.0))
+    #             .unsqueeze(-1)
+    #             .expand_as(student_masks_flat)[student_masks_flat]
+    #         )
+    #     if n_masked_patches is not None:
+    #         loss = loss[:n_masked_patches]
+    #     loss = loss * masks_weight
+    #     return -loss.sum() / student_masks_flat.shape[0]
+
 
     @torch.no_grad()
     def update_center(self, teacher_patch_tokens):

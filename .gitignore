@@ -9,4 +9,6 @@ dist/
 *.swp
 
 .vscode/
-dinov2/data/extra/*
+extra/
+eval/
+experiments/

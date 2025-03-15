@@ -10,6 +10,7 @@ import sys
 from dinov2.eval.knn import get_args_parser as get_knn_args_parser
 from dinov2.logging import setup_logging
 from dinov2.run.submit import get_args_parser, submit_jobs
+from dinov2.eval.knn import main as knn_main
 
 
 logger = logging.getLogger("dinov2")
@@ -20,7 +21,6 @@ class Evaluator:
         self.args = args
 
     def __call__(self):
-        from dinov2.eval.knn import main as knn_main
 
         self._setup_args()
         knn_main(self.args)
@@ -51,7 +51,8 @@ def main():
     setup_logging()
 
     assert os.path.exists(args.config_file), "Configuration file does not exist!"
-    submit_jobs(Evaluator, args, name="dinov2:knn")
+    # submit_jobs(Evaluator, args, name="dinov2:knn")
+    knn_main(args)
     return 0
 
 
