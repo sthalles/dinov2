@@ -35,7 +35,8 @@ class DINOLoss(nn.Module):
     def sinkhorn_knopp_teacher(self, teacher_output, teacher_temp, n_iterations=3):
         teacher_output = teacher_output.float()
         world_size = dist.get_world_size() if dist.is_initialized() else 1
-        Q = torch.exp(teacher_output / teacher_temp).t()  # Q is K-by-B for consistency with notations from our paper
+        # Q is K-by-B for consistency with notations from our paper
+        Q = torch.exp(teacher_output / teacher_temp).t()
         B = Q.shape[1] * world_size  # number of samples to assign
         K = Q.shape[0]  # how many prototypes
 
@@ -60,28 +61,17 @@ class DINOLoss(nn.Module):
         Q *= B  # the columns must sum to 1 so that Q is an assignment
         return Q.t()
 
-    # def forward(self, student_output_list, teacher_out_softmaxed_centered_list):
-    #     """
-    #     Cross-entropy between softmax outputs of the teacher and student networks.
-    #     """
-    #     # TODO: Use cross_entropy_distribution here
-    #     total_loss = 0
-    #     for s in student_output_list:
-    #         lsm = F.log_softmax(s / self.student_temp, dim=-1)
-    #         for t in teacher_out_softmaxed_centered_list:
-    #             loss = torch.sum(t * lsm, dim=-1)
-    #             total_loss -= loss.mean()
-    #     return total_loss
-
     def forward(self, student_output_list, teacher_out_softmaxed_centered_list):
         """
         Cross-entropy between softmax outputs of the teacher and student networks.
         """
+        # TODO: Use cross_entropy_distribution here
         total_loss = 0
         for s in student_output_list:
+            lsm = F.log_softmax(s / self.student_temp, dim=-1)
             for t in teacher_out_softmaxed_centered_list:
-                loss = torch.sum(torch.log(s ** (-t)), dim=-1)
-                total_loss += loss.mean()
+                loss = torch.sum(t * lsm, dim=-1)
+                total_loss -= loss.mean()
         return total_loss
 
     @torch.no_grad()
@@ -92,9 +82,11 @@ class DINOLoss(nn.Module):
     def reduce_center_update(self, teacher_output):
         self.updated = False
         self.len_teacher_output = len(teacher_output)
-        self.async_batch_center = torch.sum(teacher_output, dim=0, keepdim=True)
+        self.async_batch_center = torch.sum(
+            teacher_output, dim=0, keepdim=True)
         if dist.is_initialized():
-            self.reduce_handle = dist.all_reduce(self.async_batch_center, async_op=True)
+            self.reduce_handle = dist.all_reduce(
+                self.async_batch_center, async_op=True)
 
     @torch.no_grad()
     def apply_center_update(self):
@@ -103,8 +95,10 @@ class DINOLoss(nn.Module):
 
             if self.reduce_handle is not None:
                 self.reduce_handle.wait()
-            _t = self.async_batch_center / (self.len_teacher_output * world_size)
+            _t = self.async_batch_center / \
+                (self.len_teacher_output * world_size)
 
-            self.center = self.center * self.center_momentum + _t * (1 - self.center_momentum)
+            self.center = self.center * self.center_momentum + \
+                _t * (1 - self.center_momentum)
 
             self.updated = True

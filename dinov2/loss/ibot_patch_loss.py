@@ -18,7 +18,6 @@ try:
     from xformers.ops import cross_entropy
 
     def lossfunc(t, s, temp):
-        raise Exception("Should not come here.")
         s = s.float()
         t = t.float()
         if s.ndim == 2:
@@ -29,10 +28,8 @@ try:
 except ImportError:
 
     def lossfunc(t, s, temp):
-        return torch.sum(t * torch.log(s), dim=-1)
+        return torch.sum(t * F.log_softmax(s / temp, dim=-1), dim=-1)
 
-    # def lossfunc(t, s, temp):
-    #     return torch.sum(t * F.log_softmax(s / temp, dim=-1), dim=-1)
 
 class iBOTPatchLoss(nn.Module):
     def __init__(self, patch_out_dim, student_temp=0.1, center_momentum=0.9):
@@ -65,7 +62,8 @@ class iBOTPatchLoss(nn.Module):
     def sinkhorn_knopp_teacher(self, teacher_output, teacher_temp, n_masked_patches_tensor, n_iterations=3):
         teacher_output = teacher_output.float()
         # world_size = dist.get_world_size() if dist.is_initialized() else 1
-        Q = torch.exp(teacher_output / teacher_temp).t()  # Q is K-by-B for consistency with notations from our paper
+        # Q is K-by-B for consistency with notations from our paper
+        Q = torch.exp(teacher_output / teacher_temp).t()
         # B = Q.shape[1] * world_size # number of samples to assign
         B = n_masked_patches_tensor
         dist.all_reduce(B)
@@ -101,8 +99,10 @@ class iBOTPatchLoss(nn.Module):
         """
         t = teacher_patch_tokens
         s = student_patch_tokens
-        loss = torch.sum(t * F.log_softmax(s / self.student_temp, dim=-1), dim=-1)
-        loss = torch.sum(loss * student_masks_flat.float(), dim=-1) / student_masks_flat.sum(dim=-1).clamp(min=1.0)
+        loss = torch.sum(
+            t * F.log_softmax(s / self.student_temp, dim=-1), dim=-1)
+        loss = torch.sum(loss * student_masks_flat.float(), dim=-1) / \
+            student_masks_flat.sum(dim=-1).clamp(min=1.0)
         return -loss.mean()
 
     def forward_masked(
@@ -128,30 +128,6 @@ class iBOTPatchLoss(nn.Module):
         loss = loss * masks_weight
         return -loss.sum() / student_masks_flat.shape[0]
 
-    # def forward_masked(
-    #     self,
-    #     student_patch_tokens_masked,
-    #     teacher_patch_tokens_masked,
-    #     student_masks_flat,
-    #     n_masked_patches=None,
-    #     masks_weight=None,
-    # ):
-    #     t = teacher_patch_tokens_masked
-    #     s = student_patch_tokens_masked
-    #     # loss = torch.sum(t * F.log_softmax(s / self.student_temp, dim=-1), dim=-1)
-    #     loss = lossfunc(t, s, self.student_temp)
-    #     if masks_weight is None:
-    #         masks_weight = (
-    #             (1 / student_masks_flat.sum(-1).clamp(min=1.0))
-    #             .unsqueeze(-1)
-    #             .expand_as(student_masks_flat)[student_masks_flat]
-    #         )
-    #     if n_masked_patches is not None:
-    #         loss = loss[:n_masked_patches]
-    #     loss = loss * masks_weight
-    #     return -loss.sum() / student_masks_flat.shape[0]
-
-
     @torch.no_grad()
     def update_center(self, teacher_patch_tokens):
         self.reduce_center_update(teacher_patch_tokens)
@@ -160,9 +136,11 @@ class iBOTPatchLoss(nn.Module):
     def reduce_center_update(self, teacher_patch_tokens):
         self.updated = False
         self.len_teacher_patch_tokens = len(teacher_patch_tokens)
-        self.async_batch_center = torch.sum(teacher_patch_tokens.mean(1), dim=0, keepdim=True)
+        self.async_batch_center = torch.sum(
+            teacher_patch_tokens.mean(1), dim=0, keepdim=True)
         if dist.is_initialized():
-            self.reduce_handle = dist.all_reduce(self.async_batch_center, async_op=True)
+            self.reduce_handle = dist.all_reduce(
+                self.async_batch_center, async_op=True)
 
     @torch.no_grad()
     def apply_center_update(self):
@@ -171,8 +149,10 @@ class iBOTPatchLoss(nn.Module):
 
             if self.reduce_handle is not None:
                 self.reduce_handle.wait()
-            _t = self.async_batch_center / (self.len_teacher_patch_tokens * world_size)
+            _t = self.async_batch_center / \
+                (self.len_teacher_patch_tokens * world_size)
 
-            self.center = self.center * self.center_momentum + _t * (1 - self.center_momentum)
+            self.center = self.center * self.center_momentum + \
+                _t * (1 - self.center_momentum)
 
             self.updated = True
