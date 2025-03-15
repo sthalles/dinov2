@@ -210,6 +210,7 @@ class SSLMetaArch(nn.Module):
                 ]
                 raise Exception(
                     f"Make sure ibot_separate_head={self.ibot_separate_head} is True")
+
             elif do_ibot and self.ibot_separate_head:
                 buffer_tensor_teacher = ibot_teacher_patch_tokens.new_zeros(
                     upperbound, _dim)
@@ -230,6 +231,7 @@ class SSLMetaArch(nn.Module):
                 masked_teacher_ibot_softmaxed_centered = None
 
             if self.cfg.train.centering == "centering":
+
                 # output shape: (Num views x Batch_size, Num prototypes) -> torch.Size([2, 64, 65536])
                 # teacher_cls_tokens_after_head: torch.Size([128, 65536])
                 teacher_dino_softmaxed_centered_list = self.dino_loss.softmax_center_teacher(
@@ -252,18 +254,20 @@ class SSLMetaArch(nn.Module):
                         0)  # Out: torch.Size([3726, 65536])
                     self.ibot_patch_loss.update_center(
                         masked_teacher_patch_tokens_after_head[:n_masked_patches])
+                    print("masked_teacher_ibot_softmaxed_centered:", masked_teacher_ibot_softmaxed_centered.shape)
 
             elif self.cfg.train.centering == "sinkhorn_knopp":
                 teacher_dino_softmaxed_centered_list = self.dino_loss.sinkhorn_knopp_teacher(
                     teacher_cls_tokens_after_head, teacher_temp=teacher_temp
                 ).view(n_global_crops_teacher, -1, *teacher_cls_tokens_after_head.shape[1:])
-
+                # masked_teacher_patch_tokens_after_head: torch.Size([14916, 256])
                 if do_ibot:
                     masked_teacher_ibot_softmaxed_centered = self.ibot_patch_loss.sinkhorn_knopp_teacher(
                         masked_teacher_patch_tokens_after_head,
                         teacher_temp=teacher_temp,
                         n_masked_patches_tensor=n_masked_patches_tensor,
                     )
+                # masked_teacher_ibot_softmaxed_centered: torch.Size([14916, 256])
             else:
                 return teacher_cls_tokens_after_head, masked_teacher_patch_tokens_after_head[:, :n_masked_patches]
 
@@ -424,7 +428,6 @@ class SSLMetaArch(nn.Module):
             # accumulate loss
             loss_accumulator += self.ibot_loss_weight * ibot_patch_loss
 
-        # loss_accumulator.register_hook(lambda grad: print(grad))
 
         self.backprop_loss(loss_accumulator)
 
