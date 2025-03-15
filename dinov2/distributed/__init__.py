@@ -158,7 +158,8 @@ class _TorchDistributedEnvironment:
         self.local_world_size = -1
 
         if _is_slurm_job_process():
-            return self._set_from_slurm_env()
+            return self._set_from_preset_env()
+            # return self._set_from_slurm_env()
 
         env_vars = _collect_env_vars()
         if not env_vars:
@@ -184,17 +185,13 @@ class _TorchDistributedEnvironment:
         node_count = int(os.environ["SLURM_JOB_NUM_NODES"])
         nodes = _parse_slurm_node_list(os.environ["SLURM_JOB_NODELIST"])
         assert len(nodes) == node_count
-        if 'RANK' in os.environ and 'WORLD_SIZE' in os.environ:
-            self.rank = int(os.environ["RANK"])
-            self.world_size = int(os.environ['WORLD_SIZE'])
-            self.local_rank = int(os.environ['LOCAL_RANK'])
-        
+
         self.master_addr = nodes[0]
         self.master_port = _get_master_port(seed=job_id)
-        # self.rank = int(os.environ["SLURM_PROCID"])
-        # self.world_size = int(os.environ["SLURM_NTASKS"])
+        self.rank = int(os.environ["SLURM_PROCID"])
+        self.world_size = int(os.environ["SLURM_NTASKS"])
         assert self.rank < self.world_size
-        # self.local_rank = int(os.environ["SLURM_LOCALID"])
+        self.local_rank = int(os.environ["SLURM_LOCALID"])
         self.local_world_size = self.world_size // node_count
         assert self.local_rank < self.local_world_size
 
@@ -265,9 +262,7 @@ def enable(*, set_cuda_current_device: bool = True, overwrite: bool = False, all
             _check_env_variable(key, value)
         os.environ[key] = value
 
-    dist.init_process_group(backend="gloo", init_method="env://",
-                            world_size=torch_env.world_size,
-                            rank=torch_env.rank,)
+    dist.init_process_group(backend="gloo")
     dist.barrier()
 
     # Finalize setup

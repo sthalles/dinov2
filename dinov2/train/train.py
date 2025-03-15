@@ -8,6 +8,7 @@ import logging
 import math
 import os
 from functools import partial
+import builtins
 
 from fvcore.common.checkpoint import PeriodicCheckpointer
 import torch
@@ -286,11 +287,12 @@ def do_train(cfg, model, resume=False):
 
 def main(args):
     cfg = setup(args)
-
     model = SSLMetaArch(cfg).to(torch.device("cuda"))
     model.prepare_for_distributed_training()
     
     logger.info("Model:\n{}".format(model))
+    print("------->", args.no_resume)
+  
     if args.eval_only:
         iteration = (
             FSDPCheckpointer(model, save_dir=cfg.train.output_dir)

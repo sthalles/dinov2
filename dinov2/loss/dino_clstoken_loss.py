@@ -81,7 +81,7 @@ class DINOLoss(nn.Module):
         for s in student_output_list:
             for t in teacher_out_softmaxed_centered_list:
                 loss = torch.sum(torch.log(s ** (-t)), dim=-1)
-                total_loss = loss.mean()
+                total_loss += loss.mean()
         return total_loss
 
     @torch.no_grad()

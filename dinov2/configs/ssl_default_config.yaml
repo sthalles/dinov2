@@ -60,12 +60,12 @@ ibot:
   head_hidden_dim: 2048
 train:
   batch_size_per_gpu: 64
-  dataset_path: ImageNet:split=TRAIN
+  dataset_path: ImageNet:split=TRAIN:root=/fp/projects01/ec35/data/IN2012/:extra=/fp/projects01/ec35/homes/ec-thallesss/representation_learning/src/methods/dinov2/dinov2/data/extra
   output_dir: ./experiments/run0
   saveckp_freq: 20
   seed: 0
   num_workers: 10
-  OFFICIAL_EPOCH_LENGTH: 1250
+  OFFICIAL_EPOCH_LENGTH: 1250 # assumes a global batch size of 
   cache_dataset: true
   centering: "centering" # or "sinkhorn_knopp"
 student:
