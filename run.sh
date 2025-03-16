@@ -9,12 +9,18 @@ echo 'The work dir is: ' $CURDIR
 DATA_PATH=ImageNet:split=TRAIN:root=/fp/projects01/ec35/data/IN2012/:extra=/fp/projects01/ec35/homes/ec-thallesss/representation_learning/src/methods/dinov2/dinov2/data/extra
 # RESUME_FROM_DIR=/fp/projects01/ec35/homes/ec-thallesss/representation_learning/src/methods/dinov2/experiments/run0
 
-
 torchrun --nproc-per-node=4 dinov2/run/train/train.py \
-    --config-file dinov2/configs/train/vitb16_dinov2_short.yaml \
-    --output-dir ./experiments/run2 \
+    --config-file dinov2/configs/train/simdino_vitb16.yaml \
+    --output-dir ./experiments/simdino_hyperparams \
     --no-resume true \
     train.dataset_path=${DATA_PATH} 
+
+
+# torchrun --nproc-per-node=4 dinov2/run/train/train.py \
+#     --config-file dinov2/configs/train/vitb16_dinov2_short.yaml \
+#     --output-dir ./experiments/run2 \
+#     --no-resume true \
+#     train.dataset_path=${DATA_PATH} 
 
 # torchrun --nproc_per_node=4 --nnodes=2 --node_rank=${NODE_RANK} --rdzv_id=64515 --rdzv_backend=c10d --rdzv_endpoint=10.110.0.72:29606 dinov2/run/train/train.py \
 #     --config-file dinov2/configs/train/vitb16_short.yaml \
