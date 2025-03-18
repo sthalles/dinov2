@@ -201,9 +201,9 @@ def do_train(cfg, model, resume=False):
         batch_size=cfg.train.batch_size_per_gpu,
         num_workers=cfg.train.num_workers,
         shuffle=True,
-        seed=start_iter,  # TODO: Fix this -- cfg.train.seed
+        seed=cfg.train.seed,  # TODO: Fix this -- cfg.train.seed
         sampler_type=sampler_type,
-        sampler_advance=0,  # TODO(qas): fix this -- start_iter * cfg.train.batch_size_per_gpu,
+        sampler_advance=start_iter * cfg.train.batch_size_per_gpu,,  # TODO(qas): fix this -- start_iter * cfg.train.batch_size_per_gpu,
         drop_last=True,
         collate_fn=collate_fn,
     )
@@ -215,7 +215,6 @@ def do_train(cfg, model, resume=False):
     metrics_file = os.path.join(cfg.train.output_dir, "training_metrics.json")
     metric_logger = MetricLogger(delimiter="  ", output_file=metrics_file)
     header = "Training"
-
     for data in metric_logger.log_every(
         data_loader,
         10,
@@ -223,6 +222,7 @@ def do_train(cfg, model, resume=False):
         max_iter,
         start_iter,
     ):
+
         current_batch_size = data["collated_global_crops"].shape[0] / 2
         if iteration > max_iter:
             return

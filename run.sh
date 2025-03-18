@@ -10,9 +10,9 @@ DATA_PATH=ImageNet:split=TRAIN:root=/fp/projects01/ec35/data/IN2012/:extra=/fp/p
 # RESUME_FROM_DIR=/fp/projects01/ec35/homes/ec-thallesss/representation_learning/src/methods/dinov2/experiments/run0
 
 torchrun --nproc-per-node=4 dinov2/run/train/train.py \
-    --config-file dinov2/configs/train/simdino_vitb16.yaml \
-    --output-dir ./experiments/simdino_hyperparams \
-    --no-resume true \
+    --config-file dinov2/configs/train/vitb16_dinov2_short.yaml \
+    --output-dir ./experiments/vitb16_dinov2_short \
+    --no-resume false \
     train.dataset_path=${DATA_PATH} 
 
 
