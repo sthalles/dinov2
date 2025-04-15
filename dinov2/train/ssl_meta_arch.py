@@ -60,6 +60,7 @@ class SSLMetaArch(nn.Module):
         self.class_memory = MemoryBank(K=cfg.carp.class_memory_size, partition_size=cfg.carp.class_partition_size, 
                                        num_tasks=cfg.carp.class_num_tasks, num_experts_per_concept=cfg.carp.num_class_experts, 
                                        out_dim=cfg.carp.head_bottleneck_dim, selection_strategy=None)
+        
         self.patch_memory = MemoryBank(K=cfg.carp.patch_memory_size, partition_size=cfg.carp.patch_partition_size, 
                                        num_tasks=cfg.carp.patch_num_tasks, num_experts_per_concept=cfg.carp.num_patch_experts, 
                                        out_dim=cfg.carp.head_bottleneck_dim, selection_strategy=None)
@@ -182,16 +183,23 @@ class SSLMetaArch(nn.Module):
             teacher_backbone_output_dict = self.teacher.backbone(
                 x, is_training=True)
             teacher_cls_tokens = teacher_backbone_output_dict["x_norm_clstoken"]
+            # teacher_cls_tokens: torch.Size([512, 768])
+            
             teacher_cls_tokens = teacher_cls_tokens.chunk(
                 n_global_crops_teacher)
             # watch out: these are chunked and cat'd in reverse so A is matched to B in the global crops dino loss
             teacher_cls_tokens = torch.cat(
                 (teacher_cls_tokens[1], teacher_cls_tokens[0]))
             ibot_teacher_patch_tokens = teacher_backbone_output_dict["x_norm_patchtokens"]
+            # ibot_teacher_patch_tokens: torch.Size([512, 196, 768])
+
+
             _dim = ibot_teacher_patch_tokens.shape[-1]
             n_cls_tokens = teacher_cls_tokens.shape[0]
 
             if do_ibot and not self.ibot_separate_head:
+                raise Exception(
+                    f"Make sure ibot_separate_head={self.ibot_separate_head} is True")
                 buffer_tensor_teacher = ibot_teacher_patch_tokens.new_zeros(
                     upperbound + n_cls_tokens, _dim)
                 buffer_tensor_teacher[:n_cls_tokens].copy_(teacher_cls_tokens)
@@ -208,8 +216,7 @@ class SSLMetaArch(nn.Module):
                 masked_teacher_patch_tokens_after_head = tokens_after_head[
                     n_cls_tokens: n_cls_tokens + n_masked_patches
                 ]
-                raise Exception(
-                    f"Make sure ibot_separate_head={self.ibot_separate_head} is True")
+
 
             elif do_ibot and self.ibot_separate_head:
                 buffer_tensor_teacher = ibot_teacher_patch_tokens.new_zeros(
@@ -222,16 +229,19 @@ class SSLMetaArch(nn.Module):
                 )
                 teacher_cls_tokens_after_head = self.teacher.dino_head(
                     teacher_cls_tokens)
+                # teacher_cls_tokens_after_head: torch.Size([512, 256])
                 masked_teacher_patch_tokens_after_head = self.teacher.ibot_head(buffer_tensor_teacher)[
                     :n_masked_patches
                 ]
+                # masked_teacher_patch_tokens_after_head: torch.Size([14916, 256])
             else:
+                raise Exception("Should not happen.")
                 teacher_cls_tokens_after_head = self.teacher.dino_head(
                     teacher_cls_tokens)
                 masked_teacher_ibot_softmaxed_centered = None
-
+   
             if self.cfg.train.centering == "centering":
-
+                raise Exception("No centering ope.")
                 # output shape: (Num views x Batch_size, Num prototypes) -> torch.Size([2, 64, 65536])
                 # teacher_cls_tokens_after_head: torch.Size([128, 65536])
                 teacher_dino_softmaxed_centered_list = self.dino_loss.softmax_center_teacher(
@@ -257,6 +267,7 @@ class SSLMetaArch(nn.Module):
                     print("masked_teacher_ibot_softmaxed_centered:", masked_teacher_ibot_softmaxed_centered.shape)
 
             elif self.cfg.train.centering == "sinkhorn_knopp":
+                raise Exception("No sinkhorn_knopp ope.")
                 teacher_dino_softmaxed_centered_list = self.dino_loss.sinkhorn_knopp_teacher(
                     teacher_cls_tokens_after_head, teacher_temp=teacher_temp
                 ).view(n_global_crops_teacher, -1, *teacher_cls_tokens_after_head.shape[1:])
@@ -269,12 +280,14 @@ class SSLMetaArch(nn.Module):
                     )
                 # masked_teacher_ibot_softmaxed_centered: torch.Size([14916, 256])
             else:
-                return teacher_cls_tokens_after_head, masked_teacher_patch_tokens_after_head[:, :n_masked_patches]
+                teacher_dino_softmaxed_centered_list = teacher_cls_tokens_after_head
+                masked_teacher_ibot_softmaxed_centered = masked_teacher_patch_tokens_after_head
+                # return teacher_cls_tokens_after_head, masked_teacher_patch_tokens_after_head
 
             return teacher_dino_softmaxed_centered_list, masked_teacher_ibot_softmaxed_centered
 
-        # teacher_dino_softmaxed_centered_list: torch.Size([2, 64, 65536])
-        # masked_teacher_ibot_softmaxed_centered: torch.Size([3728, 65536])
+        # teacher_dino_softmaxed_centered_list: torch.Size([512, 256])
+        # masked_teacher_ibot_softmaxed_centered: torch.Size([14904, 256])
         teacher_dino_softmaxed_centered_list, masked_teacher_ibot_softmaxed_centered = get_teacher_output()
 
         reshard_fsdp_model(self.teacher)
@@ -322,21 +335,27 @@ class SSLMetaArch(nn.Module):
         outputs_list = _attn_bias.split(self.student.dino_head(cat_inputs))
 
         # 3a: local crops cls tokens
-        # student_local_cls_tokens_after_head: torch.Size([512, 65536])
+        # student_local_cls_tokens_after_head: torch.Size([N_Local_Views, 256])
         student_local_cls_tokens_after_head = outputs_list.pop(0).squeeze(0)
 
         # 3b: global crops cls tokens
-        # student_global_cls_tokens_after_head: torch.Size([128, 65536])
+        # student_global_cls_tokens_after_head: torch.Size([N_global_Views, 256])
         student_global_cls_tokens_after_head = outputs_list.pop(0).squeeze(0)
-        # print("student_global_cls_tokens_after_head:", student_global_cls_tokens_after_head.shape)
 
         # 3c: global crops patch tokens
         if do_ibot and not self.ibot_separate_head:
+            raise Exception("Should not happen.")
             student_global_masked_patch_tokens_after_head = outputs_list.pop(0).squeeze(0)[
                 :n_masked_patches]
 
-        student_local_cls_tokens_after_memory_list, teacher_dino_cls_tokens_after_memory_list = self.class_memory(
-            student_local_cls_tokens_after_head.float(), teacher_dino_softmaxed_centered_list.float(), student_temp=0.1, teacher_temp=teacher_temp)
+        with torch.cuda.amp.autocast(dtype=torch.bfloat16):
+            student_local_cls_tokens_after_memory_list, teacher_dino_cls_tokens_after_memory_list = self.class_memory(
+                student_local_cls_tokens_after_head, teacher_dino_softmaxed_centered_list, student_temp=0.1, teacher_temp=teacher_temp)
+            
+        # len(student_local_cls_tokens_after_memory_list): 4
+        # student_local_cls_tokens_after_memory_list[0]: torch.Size([1536, 4096])
+        # len(teacher_dino_cls_tokens_after_memory_list): 4
+        # teacher_dino_cls_tokens_after_memory_list[0]: torch.Size([512, 4096])
 
         if n_local_crops > 0:
             dino_local_crops_loss = 0
@@ -357,37 +376,49 @@ class SSLMetaArch(nn.Module):
 
             # accumulate loss
             loss_accumulator += self.dino_loss_weight * dino_local_crops_loss
-
+     
         # process global crops
         loss_scales = 2  # this is here since we process global crops together
 
-        student_global_cls_tokens_after_memory_list, teacher_dino_cls_tokens_after_memory_list = self.class_memory(
-            student_global_cls_tokens_after_head.float(), teacher_dino_softmaxed_centered_list.float(), student_temp=0.1, teacher_temp=teacher_temp)
-
+        with torch.cuda.amp.autocast(dtype=torch.bfloat16):
+            student_global_cls_tokens_after_memory_list, teacher_dino_cls_tokens_after_memory_list = self.class_memory(
+                student_global_cls_tokens_after_head, teacher_dino_softmaxed_centered_list, student_temp=0.1, teacher_temp=teacher_temp)
+        # len(student_global_cls_tokens_after_memory_list): 4
+        # student_global_cls_tokens_after_memory_list[0]: torch.Size([512, 4096])
+        # len(teacher_dino_cls_tokens_after_memory_list): 4
+        # teacher_dino_cls_tokens_after_memory_list[0]: torch.Size([512, 4096])
         if do_dino:
-            assert student_global_cls_tokens_after_memory_list[
-                0].shape == teacher_dino_cls_tokens_after_memory_list[0].shape
-            # compute loss
-            dino_global_crops_loss = (
-                self.dino_loss(
-                    student_output_list=student_global_cls_tokens_after_memory_list,
-                    # these were chunked and stacked in reverse so A is matched to B
-                    teacher_out_softmaxed_centered_list=teacher_dino_cls_tokens_after_memory_list,
+            assert student_global_cls_tokens_after_memory_list[0].shape == teacher_dino_cls_tokens_after_memory_list[0].shape
+            
+            dino_global_crop_cls_loss = 0
+            for student_global_cls_tokens_after_memory, teacher_dino_cls_tokens_after_memory in zip(student_global_cls_tokens_after_memory_list, teacher_dino_cls_tokens_after_memory_list):
+                # compute loss
+                dino_global_crops_loss = (
+                    self.dino_loss(
+                        student_output_list=[
+                            student_global_cls_tokens_after_memory],
+                        # these were chunked and stacked in reverse so A is matched to B
+                        teacher_out_softmaxed_centered_list=[
+                            teacher_dino_cls_tokens_after_memory],
+                    )
+                    * loss_scales
+                    / (n_global_crops_loss_terms + n_local_crops_loss_terms)
                 )
-                * loss_scales
-                / (n_global_crops_loss_terms + n_local_crops_loss_terms)
-            )
-            dino_global_crops_loss /= len(
+                
+                dino_global_crop_cls_loss += dino_global_crops_loss
+                
+            dino_global_crop_cls_loss /= len(
                 student_global_cls_tokens_after_memory_list)
 
-            loss_dict["dino_global_crops_loss"] = dino_global_crops_loss
+            loss_dict["dino_global_crop_cls_loss"] = dino_global_crop_cls_loss
 
             # accumulate loss
-            loss_accumulator += self.dino_loss_weight * dino_global_crops_loss
-
-            student_cls_tokens = student_global_cls_tokens
+            loss_accumulator += self.dino_loss_weight * dino_global_crop_cls_loss
 
             if self.do_koleo:
+                # raise Exception("Koleo should be Disabled.")
+                student_cls_tokens = student_global_cls_tokens
+
                 koleo_loss = self.cfg.dino.koleo_loss_weight * sum(
                     self.koleo_loss(p) for p in student_cls_tokens.chunk(2)
                 )  # we don't apply koleo loss between cls tokens of a same image
@@ -400,9 +431,12 @@ class SSLMetaArch(nn.Module):
             teacher_dino_softmaxed_centered_list.chunk(2)[1].detach())
 
         if do_ibot:
-
-            student_global_masked_patch_tokens_after_memory_list, masked_teacher_ibot_after_memory_list = self.patch_memory(
-                student_global_masked_patch_tokens_after_head.float(), masked_teacher_ibot_softmaxed_centered.float(), student_temp=0.1, teacher_temp=teacher_temp)
+            # student_global_masked_patch_tokens_after_head: torch.Size([14906, 256])
+            # masked_teacher_ibot_softmaxed_centered: torch.Size([14904, 256])
+            assert student_global_masked_patch_tokens_after_head.shape == masked_teacher_ibot_softmaxed_centered.shape
+            with torch.cuda.amp.autocast(dtype=torch.bfloat16):
+                student_global_masked_patch_tokens_after_memory_list, masked_teacher_ibot_after_memory_list = self.patch_memory(
+                    student_global_masked_patch_tokens_after_head, masked_teacher_ibot_softmaxed_centered, student_temp=0.1, teacher_temp=teacher_temp)
 
             ibot_patch_loss = 0
             for student_global_masked_patch_tokens_after_memory, masked_teacher_ibot_after_memory in zip(student_global_masked_patch_tokens_after_memory_list, masked_teacher_ibot_after_memory_list):
@@ -438,8 +472,6 @@ class SSLMetaArch(nn.Module):
             masked_teacher_ibot_softmaxed_centered, indices=teacher_patch_embed_ids.unsqueeze(1), dim=0)
         self.patch_memory.update_queue(k_.detach())
 
-        # I commemented this due to:
-        # AttributeError: 'DinoVisionTransformer' object has no attribute '_streams'
         self.fsdp_synchronize_streams()
 
         return loss_dict

@@ -5,8 +5,8 @@ cd $CURDIR
 export PYTHONPATH="$PYTHONPATH:$CURDIR"
 echo 'The work dir is: ' $CURDIR
 
-MODELS_ROOT_PATH='/fp/projects01/ec35/homes/ec-thallesss/representation_learning/src/methods/dinov2/experiments/run1'
-MODEL_VERSION='training_124999'
+MODELS_ROOT_PATH='/fp/projects01/ec35/homes/ec-thallesss/representation_learning/src/methods/dinov2/experiments/non_param_swav_no_koleo'
+MODEL_VERSION='training_87499'
 
 torchrun --nproc-per-node=4 dinov2/run/eval/knn.py \
     --config-file "${MODELS_ROOT_PATH}/config.yaml" \

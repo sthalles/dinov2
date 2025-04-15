@@ -9,8 +9,19 @@ train:
 student:
   block_chunks: 4
   arch: vit_base
+  num_register_tokens: 4
+  drop_path_rate: 0.2
+  layerscale: 0.1
+teacher:
+  momentum_teacher: 0.9
 ibot:
   separate_head: true
+  mask_sample_probability: 0.5
+  mask_ratio_min_max:
+  - 0.1
+  - 0.5
+dino:
+  koleo_loss_weight: 0.1
 carp:
   class_partition_size: 4096
   patch_partition_size: 512
@@ -21,4 +32,11 @@ carp:
   class_memory_size: 65536
   patch_memory_size: 8192
   head_bottleneck_dim: 256
-  
+crops:
+  global_crops_scale:
+  - 0.4
+  - 1.0
+  local_crops_number: 10
+  local_crops_scale:
+  - 0.05
+  - 0.4

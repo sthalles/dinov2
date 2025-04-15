@@ -113,10 +113,17 @@ class iBOTPatchLoss(nn.Module):
         n_masked_patches=None,
         masks_weight=None,
     ):
+        # s: torch.Size([14899, 512]) t: torch.Size([14899, 512])
+        # student_masks_flat: torch.Size([512, 196])
+        # loss: torch.Size([14899])
+        # masks_weight: torch.Size([14899])
+
         t = teacher_patch_tokens_masked
         s = student_patch_tokens_masked
-        # loss = torch.sum(t * F.log_softmax(s / self.student_temp, dim=-1), dim=-1)
-        loss = lossfunc(t, s, self.student_temp)
+
+        # loss = torch.sum(torch.log(s ** (-t)), dim=-1)
+        loss = -torch.sum(t * F.log_softmax(s, dim=1), dim=1)
+
         if masks_weight is None:
             masks_weight = (
                 (1 / student_masks_flat.sum(-1).clamp(min=1.0))
@@ -126,7 +133,7 @@ class iBOTPatchLoss(nn.Module):
         if n_masked_patches is not None:
             loss = loss[:n_masked_patches]
         loss = loss * masks_weight
-        return -loss.sum() / student_masks_flat.shape[0]
+        return loss.sum() / student_masks_flat.shape[0]
 
     # def forward_masked(
     #     self,

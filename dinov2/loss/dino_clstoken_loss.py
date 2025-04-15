@@ -80,7 +80,10 @@ class DINOLoss(nn.Module):
         total_loss = 0
         for s in student_output_list:
             for t in teacher_out_softmaxed_centered_list:
-                loss = torch.sum(torch.log(s ** (-t)), dim=-1)
+                assert s.requires_grad == True
+                assert t.requires_grad == False
+                loss = -torch.sum(t * F.log_softmax(s, dim=1), dim=1)
+                # loss = torch.sum(torch.log(s ** (-t)), dim=-1)
                 total_loss += loss.mean()
         return total_loss
 
@@ -108,3 +111,4 @@ class DINOLoss(nn.Module):
             self.center = self.center * self.center_momentum + _t * (1 - self.center_momentum)
 
             self.updated = True
+

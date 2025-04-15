@@ -49,7 +49,8 @@ class MaskingGenerator:
     def _mask(self, mask, max_mask_patches):
         delta = 0
         for _ in range(10):
-            target_area = random.uniform(self.min_num_patches, max_mask_patches)
+            target_area = random.uniform(
+                self.min_num_patches, max_mask_patches)
             aspect_ratio = math.exp(random.uniform(*self.log_aspect_ratio))
             h = int(round(math.sqrt(target_area * aspect_ratio)))
             w = int(round(math.sqrt(target_area / aspect_ratio)))
@@ -57,7 +58,7 @@ class MaskingGenerator:
                 top = random.randint(0, self.height - h)
                 left = random.randint(0, self.width - w)
 
-                num_masked = mask[top : top + h, left : left + w].sum()
+                num_masked = mask[top: top + h, left: left + w].sum()
                 # Overlap
                 if 0 < h * w - num_masked <= max_mask_patches:
                     for i in range(top, top + h):
@@ -84,3 +85,81 @@ class MaskingGenerator:
                 mask_count += delta
 
         return mask
+
+
+def random_boolean_array(n, k):
+    arr = np.array([True] * k + [False] * (n - k))
+    np.random.shuffle(arr)
+    return arr
+
+
+class UniformMasking:
+    def __init__(
+        self,
+        input_size,
+    ):
+        self.height, self.width = input_size
+
+    def __call__(self, num_masking_patches=0):
+        mask = random_boolean_array(
+            self.height * self.width, num_masking_patches)
+        mask = mask.reshape((self.height, self.width))
+        return mask
+
+
+class BlockMasking:
+    def __init__(
+        self,
+        input_size: tuple[int, int],
+        roll: bool = True,
+        min_aspect: float = 0.5,
+        max_aspect: float | None = None,
+    ):
+        self.height, self.width = input_size
+        self.roll = roll
+        max_aspect = max_aspect or 1 / min_aspect
+        self.log_aspect_ratio = (math.log(min_aspect), math.log(max_aspect))
+
+    # -> jt.Bool[np.ndarray, "h w"]:
+    def __call__(self, num_masking_patches: int = 0):
+        if num_masking_patches == 0:
+            return np.zeros((self.height, self.width), dtype=bool)
+        # Sample aspect ratio, not too large or too small for image
+        min_lar = max(self.log_aspect_ratio[0], np.log(
+            num_masking_patches / (self.width**2)))
+        max_lar = min(
+            self.log_aspect_ratio[1],
+            np.log(self.height**2 / (num_masking_patches + 1e-5)),
+        )
+        aspect_ratio = math.exp(random.uniform(min_lar, max_lar))
+        # Use ceil so mask is >= num_masking_patches
+        h = int(np.ceil(math.sqrt(num_masking_patches * aspect_ratio)))
+        w = int(np.ceil(math.sqrt(num_masking_patches / aspect_ratio)))
+
+        top = random.randint(0, self.height - h)
+        left = random.randint(0, self.width - w)
+        mask = np.zeros((self.height, self.width), dtype=bool)
+        mask[top: top + h, left: left + w] = True
+        # truncate ids to get exactly num_masking_patches
+        ids = np.where(mask.flatten())[0][:num_masking_patches]
+        mask = np.zeros((self.height, self.width), dtype=bool).flatten()
+        mask[ids] = True
+        mask = mask.reshape((self.height, self.width))
+        if self.roll:
+            shift_x = random.randint(0, mask.shape[0] - 1)
+            shift_y = random.randint(0, mask.shape[1] - 1)
+            mask = np.roll(mask, (shift_x, shift_y), (0, 1))
+        return mask
+
+
+class InverseBlockMasking(BlockMasking):
+    def __call__(self, num_masking_patches=0):
+        mask = super().__call__(self.height * self.width - num_masking_patches)
+        return ~mask
+
+
+mask_generators_dict = {
+    "Uniform": UniformMasking,
+    "Block": BlockMasking,
+    "InverseBlock": InverseBlockMasking,
+}

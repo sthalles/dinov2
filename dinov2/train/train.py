@@ -9,6 +9,7 @@ import math
 import os
 from functools import partial
 import builtins
+import shutil
 
 from fvcore.common.checkpoint import PeriodicCheckpointer
 import torch
@@ -21,6 +22,7 @@ from dinov2.utils.config import setup
 from dinov2.utils.utils import CosineScheduler
 
 from dinov2.train.ssl_meta_arch import SSLMetaArch
+from dinov2.data.masking import mask_generators_dict
 
 
 torch.backends.cuda.matmul.allow_tf32 = True  # PyTorch 1.12 sets this to False by default
@@ -170,6 +172,13 @@ def do_train(cfg, model, resume=False):
         input_size=(img_size // patch_size, img_size // patch_size),
         max_num_patches=0.5 * img_size // patch_size * img_size // patch_size,
     )
+    
+    # img_size = cfg.data.images_size
+    # patch_size = model.student.backbone.patch_size
+    # n_tokens = (img_size // patch_size) ** 2
+    # mask_generator = mask_generators_dict["InverseBlock"](
+    #     input_size=(img_size // patch_size, img_size // patch_size),
+    # )
 
     data_transform = DataAugmentationDINO(
         cfg.crops.global_crops_scale,
@@ -210,7 +219,21 @@ def do_train(cfg, model, resume=False):
 
     # training loop
     iteration = start_iter
-
+    
+    if distributed.is_main_process():
+        shutil.copyfile("dinov2/train/ssl_meta_arch.py", os.path.join(
+            cfg.train.output_dir, "ssl_meta_arch.py")
+        )
+        shutil.copyfile("dinov2/loss/dino_clstoken_loss.py", os.path.join(
+            cfg.train.output_dir, "dino_clstoken_loss.py")
+        )
+        shutil.copyfile("dinov2/loss/ibot_patch_loss.py", os.path.join(
+            cfg.train.output_dir, "ibot_patch_loss.py")
+        )
+        shutil.copyfile("dinov2/layers/memory.py", os.path.join(
+            cfg.train.output_dir, "memory.py")
+        )
+        
     logger.info("Starting training from iteration {}".format(start_iter))
     metrics_file = os.path.join(cfg.train.output_dir, "training_metrics.json")
     metric_logger = MetricLogger(delimiter="  ", output_file=metrics_file)
